@@ -24,6 +24,8 @@ public class VRGun : MonoBehaviour
     
     [Header("Collision Detection")]
     [SerializeField] private LayerMask damageableLayers = -1;
+    [SerializeField] private int maxRicochets = 2;
+    [SerializeField] private float ricochetChance = 0.5f;
     
     [Header("Visual Effects")]
     [SerializeField] private GameObject muzzleFlashPrefab;
@@ -57,6 +59,7 @@ public class VRGun : MonoBehaviour
     private bool isInitialized;
     private bool isTwoHanded;
     private Camera mainCamera;
+    private PhysicsLOD cachedLOD;
     
     public bool HasChamberedRound => chamberedRound;
     public bool HasMagazine => currentMagazine != null;
@@ -312,10 +315,34 @@ public class VRGun : MonoBehaviour
     {
         Vector3 origin = muzzlePoint.position;
         Vector3 direction = muzzlePoint.forward;
-        
-        if (Physics.Raycast(origin, direction, out RaycastHit hit, gunData.range, damageableLayers))
+        int ricochetsRemaining = maxRicochets;
+
+        while (ricochetsRemaining >= 0)
         {
-            ProcessHit(hit, direction);
+            if (Physics.Raycast(origin, direction, out RaycastHit hit, gunData.range, damageableLayers))
+            {
+                ProcessHit(hit, direction);
+
+                // Ricochet logic
+                if (ricochetsRemaining > 0 && Random.value < ricochetChance)
+                {
+                    origin = hit.point + hit.normal * 0.01f;
+                    direction = Vector3.Reflect(direction, hit.normal);
+                    ricochetsRemaining--;
+
+                    // Add slight random spread to ricochet
+                    direction += Random.insideUnitSphere * 0.1f;
+                    direction.Normalize();
+                }
+                else
+                {
+                    break;
+                }
+            }
+            else
+            {
+                break;
+            }
         }
     }
     
@@ -383,8 +410,7 @@ public class VRGun : MonoBehaviour
             shellRb.collisionDetectionMode = CollisionDetectionMode.Discrete;
         }
 
-        PhysicsLOD lod = FindFirstObjectByType<PhysicsLOD>();
-        if (lod != null) lod.RegisterRigidbody(shellRb);
+        if (cachedLOD != null) cachedLOD.RegisterRigidbody(shellRb);
         
         Vector3 ejectionDir = ejectionPort.TransformDirection(gunData.shellEjectionDirection.normalized);
         Vector3 randomOffset = Random.insideUnitSphere * 0.5f;
@@ -420,7 +446,7 @@ public class VRGun : MonoBehaviour
     {
         if (rb == null || !grabInteractable.isSelected) return;
         
-        float recoilMult = isTwoHanded ? (1f - gunData.twoHandedRecoilReduction) : 1f;
+        float recoilMult = isTwoHanded ? (1f - gunData.twoHandedRecoilReduction) : gunData.oneHandedRecoilMultiplier;
 
         Vector3 recoilDirection = -muzzlePoint.forward;
         Vector3 upwardKick = muzzlePoint.up * gunData.recoilTorque * 0.5f;
@@ -477,6 +503,7 @@ public class VRGun : MonoBehaviour
     {
         if (fireSound != null)
         {
+            audioSource.pitch = Random.Range(0.9f, 1.1f);
             audioSource.PlayOneShot(fireSound, 1.0f);
         }
     }
@@ -485,6 +512,7 @@ public class VRGun : MonoBehaviour
     {
         if (emptySound != null && !audioSource.isPlaying)
         {
+            audioSource.pitch = Random.Range(0.95f, 1.05f);
             audioSource.PlayOneShot(emptySound, 0.5f);
         }
     }
@@ -493,6 +521,7 @@ public class VRGun : MonoBehaviour
     {
         if (slideRackSound != null)
         {
+            audioSource.pitch = Random.Range(0.95f, 1.05f);
             audioSource.PlayOneShot(slideRackSound, 0.8f);
         }
     }

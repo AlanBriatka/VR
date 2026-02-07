@@ -46,4 +46,7 @@ public class GunData : ScriptableObject
 
     [Tooltip("Sway reduction when held with both hands (0 to 1)")]
     public float twoHandedSwayReduction = 0.7f;
+
+    [Tooltip("Recoil multiplier when fired one-handed")]
+    public float oneHandedRecoilMultiplier = 1.5f;
 }

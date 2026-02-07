@@ -18,6 +18,7 @@ public class ProceduralEnemyAnimation : MonoBehaviour
     [Header("Idle Settings")]
     [SerializeField] private float breathingIntensity = 0.02f;
     [SerializeField] private float breathingSpeed = 1.5f;
+    [SerializeField] private float microNoiseIntensity = 0.005f;
 
     [Header("Awareness")]
     [SerializeField] private bool lookAtPlayer = true;
@@ -120,9 +121,15 @@ public class ProceduralEnemyAnimation : MonoBehaviour
     private void UpdateIdle()
     {
         float breath = Mathf.Sin(Time.time * breathingSpeed) * breathingIntensity;
+
+        // Add micro-noise for "living" feel
+        float noiseX = Mathf.PerlinNoise(Time.time, 0) - 0.5f;
+        float noiseZ = Mathf.PerlinNoise(0, Time.time) - 0.5f;
+        Vector3 noise = new Vector3(noiseX, 0, noiseZ) * microNoiseIntensity;
+
         if (bodyTarget)
         {
-            bodyTarget.localPosition = Vector3.Lerp(bodyTarget.localPosition, bodyOriginalPos + new Vector3(0, breath, 0), Time.deltaTime * 5f);
+            bodyTarget.localPosition = Vector3.Lerp(bodyTarget.localPosition, bodyOriginalPos + new Vector3(0, breath, 0) + noise, Time.deltaTime * 5f);
         }
 
         // Reset feet

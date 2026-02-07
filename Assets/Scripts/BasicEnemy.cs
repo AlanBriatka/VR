@@ -307,6 +307,12 @@ public class BasicEnemy : MonoBehaviour, IDamageable
         if (isLegshot) finalDamage *= 0.8f;
 
         currentHealth -= finalDamage;
+
+        // Dismemberment chance on high damage
+        if (finalDamage > 40f && hitRb != null && hitRb != GetComponent<Rigidbody>())
+        {
+            DismemberLimb(hitRb, hitDirection);
+        }
         
         if (currentHealth <= 0)
         {
@@ -342,6 +348,25 @@ public class BasicEnemy : MonoBehaviour, IDamageable
         moveSpeed *= 0.3f;
         if (agent != null && agent.isOnNavMesh) agent.speed = moveSpeed;
         Debug.Log($"[{name}] HOBBLING!");
+    }
+
+    private void DismemberLimb(Rigidbody limb, Vector3 force)
+    {
+        CharacterJoint joint = limb.GetComponent<CharacterJoint>();
+        if (joint != null)
+        {
+            Destroy(joint);
+            limb.transform.SetParent(null);
+            limb.AddForce(force * 5f, ForceMode.Impulse);
+
+            // Trigger blood effect at detachment point
+            if (ImpactManager.Instance != null)
+            {
+                ImpactManager.Instance.PlayImpact(limb.position, -force.normalized, "Flesh");
+            }
+
+            Debug.Log($"[{name}] DISMEMBERED: {limb.name}");
+        }
     }
 
     private void BreakArmor(Vector3 hitDirection)
