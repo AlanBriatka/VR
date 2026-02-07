@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5d7cfbb3463dd74a8e7e62180aac681, type: 3}
+  m_Name: GunData
+  m_EditorClassIdentifier: Assembly-CSharp::GunData
+  damage: 30
+  range: 100
+  fireRate: 0.15
+  recoilForce: 3
+  recoilTorque: 2
+  slideKickbackDistance: 0.05
+  slideReturnSpeed: 20
+  shellEjectionForce: 3
+  shellEjectionDirection: {x: 1, y: 1, z: 0}
+  shellEjectionTorque: 10
+  shellLifetime: 5
