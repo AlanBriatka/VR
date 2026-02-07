@@ -19,6 +19,11 @@ public class BasicEnemy : MonoBehaviour, IDamageable
     [SerializeField] private float healthRetreatThreshold = 30f;
     [SerializeField] private float coverSearchRadius = 10f;
     
+    [Header("Armor System")]
+    [SerializeField] private GameObject[] armorPieces;
+    [SerializeField] private float armorHealth = 50f;
+    private bool armorBroken;
+
     [Header("Ragdoll")]
     [SerializeField] private bool enableRagdollOnDeath = true;
     [SerializeField] private float ragdollForceMultiplier = 300f;
@@ -183,7 +188,12 @@ public class BasicEnemy : MonoBehaviour, IDamageable
 
             case EnemyState.SeekingCover:
                 UpdateAnimator(agent.velocity.magnitude);
-                if (!agent.hasPath || agent.remainingDistance < 0.5f)
+                if (!agent.pathPending && agent.remainingDistance < 0.5f)
+                {
+                    // Stay in cover for a bit or transition back
+                    if (Random.value < 0.01f) currentState = EnemyState.Chasing;
+                }
+                if (!agent.hasPath)
                 {
                     FindCover();
                 }
@@ -276,6 +286,19 @@ public class BasicEnemy : MonoBehaviour, IDamageable
         if (currentState == EnemyState.Dead) return;
         
         float finalDamage = damage;
+
+        // Armor logic
+        if (!armorBroken && armorPieces != null && armorPieces.Length > 0)
+        {
+            armorHealth -= damage;
+            finalDamage *= 0.5f; // Armor reduces damage
+
+            if (armorHealth <= 0)
+            {
+                BreakArmor(hitDirection);
+            }
+        }
+
         Rigidbody hitRb = FindClosestRigidbody(hitPoint);
         bool isHeadshot = hitRb != null && hitRb.name.ToLower().Contains("head");
         bool isLegshot = hitRb != null && (hitRb.name.ToLower().Contains("leg") || hitRb.name.ToLower().Contains("foot"));
@@ -319,6 +342,24 @@ public class BasicEnemy : MonoBehaviour, IDamageable
         moveSpeed *= 0.3f;
         if (agent != null && agent.isOnNavMesh) agent.speed = moveSpeed;
         Debug.Log($"[{name}] HOBBLING!");
+    }
+
+    private void BreakArmor(Vector3 hitDirection)
+    {
+        armorBroken = true;
+        foreach (GameObject piece in armorPieces)
+        {
+            if (piece == null) continue;
+            piece.transform.SetParent(null);
+            Rigidbody rb = piece.GetComponent<Rigidbody>();
+            if (rb == null) rb = piece.AddComponent<Rigidbody>();
+
+            rb.isKinematic = false;
+            rb.AddForce(hitDirection * 5f, ForceMode.Impulse);
+            rb.AddTorque(Random.insideUnitSphere * 10f, ForceMode.Impulse);
+            Destroy(piece, 5f);
+        }
+        Debug.Log($"[{name}] ARMOR SHATTERED!");
     }
     
     private void TransitionToStagger(Vector3 hitDirection, float damage)
@@ -373,6 +414,12 @@ public class BasicEnemy : MonoBehaviour, IDamageable
         {
             WaveManager.Instance.EnemyDied();
         }
+
+        if (TimeManipulation.Instance != null)
+        {
+            TimeManipulation.Instance.AddFocusFromKill();
+        }
+
         Destroy(gameObject, 10f);
     }
     
