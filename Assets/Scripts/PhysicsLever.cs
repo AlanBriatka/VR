@@ -12,12 +12,19 @@ public class PhysicsLever : MonoBehaviour
     public UnityEvent onActivated;
     public UnityEvent onDeactivated;
 
+    [Header("Audio")]
+    [SerializeField] private AudioClip activateSound;
+    [SerializeField] private AudioClip deactivateSound;
+
     private HingeJoint hinge;
     private bool isActivated;
+    private AudioSource audioSource;
 
     private void Awake()
     {
         hinge = GetComponent<HingeJoint>();
+        audioSource = GetComponent<AudioSource>();
+        if (audioSource == null) audioSource = gameObject.AddComponent<AudioSource>();
     }
 
     private void Update()
@@ -28,13 +35,13 @@ public class PhysicsLever : MonoBehaviour
         {
             isActivated = true;
             onActivated?.Invoke();
-            PlayClickSound(true);
+            HandleActivation(true);
         }
         else if (isActivated && normalizedPos < (1f - threshold))
         {
             isActivated = false;
             onDeactivated?.Invoke();
-            PlayClickSound(false);
+            HandleActivation(false);
         }
     }
 
@@ -45,11 +52,14 @@ public class PhysicsLever : MonoBehaviour
         return (hinge.angle - hinge.limits.min) / limitsRange;
     }
 
-    private void PlayClickSound(bool active)
+    private void HandleActivation(bool active)
     {
+        if (active && activateSound != null) audioSource.PlayOneShot(activateSound);
+        if (!active && deactivateSound != null) audioSource.PlayOneShot(deactivateSound);
+
         // Add haptics if grabbed
         var grab = GetComponent<XRGrabInteractable>();
-        if (grab.isSelected)
+        if (grab != null && grab.isSelected)
         {
             foreach (var interactor in grab.interactorsSelecting)
             {

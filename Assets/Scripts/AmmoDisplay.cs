@@ -28,7 +28,12 @@ public class AmmoDisplay : MonoBehaviour
         // Color transition
         if (gun.HasMagazine)
         {
-            float ratio = (float)current / 15f; // Assuming 15 is standard, could be dynamic
+            // Try to get max ammo from GunMagazine
+            int max = 15;
+            GunMagazine mag = gun.GetComponentInChildren<GunMagazine>();
+            if (mag != null) max = mag.MaxAmmo;
+
+            float ratio = (float)current / max;
             ammoText.color = Color.Lerp(emptyColor, fullColor, ratio);
         }
         else

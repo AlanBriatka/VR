@@ -15,6 +15,7 @@ public class VRGun : MonoBehaviour
     [SerializeField] private Transform slideTransform;
     [SerializeField] private Transform ejectionPort;
     [SerializeField] private Transform muzzlePoint;
+    [SerializeField] private Transform stockPoint;
     [SerializeField] private XRGrabInteractable secondaryGrip;
     
     [Header("Magazine System")]
@@ -33,6 +34,11 @@ public class VRGun : MonoBehaviour
     [SerializeField] private AudioClip fireSound;
     [SerializeField] private AudioClip emptySound;
     [SerializeField] private AudioClip slideRackSound;
+
+    [Header("Virtual Stock")]
+    [SerializeField] private bool useVirtualStock = true;
+    [SerializeField] private float stockThreshold = 0.25f;
+    [SerializeField] private float stockSmoothing = 10f;
     
     private enum GunState { Ready, Empty, NoMagazine }
     
@@ -50,6 +56,7 @@ public class VRGun : MonoBehaviour
     
     private bool isInitialized;
     private bool isTwoHanded;
+    private Camera mainCamera;
     
     public bool HasChamberedRound => chamberedRound;
     public bool HasMagazine => currentMagazine != null;
@@ -60,6 +67,7 @@ public class VRGun : MonoBehaviour
         CacheComponents();
         InitializeSlide();
         ValidateSetup();
+        mainCamera = Camera.main;
     }
     
     private void CacheComponents()
@@ -148,6 +156,25 @@ public class VRGun : MonoBehaviour
         HandleTrigger();
         UpdateSlideAnimation();
         ApplyStabilization();
+        UpdateVirtualStock();
+    }
+
+    private void UpdateVirtualStock()
+    {
+        if (!useVirtualStock || mainCamera == null || !grabInteractable.isSelected) return;
+        if (stockPoint == null) return;
+
+        Vector3 shoulderPos = mainCamera.transform.position + mainCamera.transform.right * 0.15f - mainCamera.transform.up * 0.2f;
+        float distanceToShoulder = Vector3.Distance(stockPoint.position, shoulderPos);
+
+        if (distanceToShoulder < stockThreshold)
+        {
+            Vector3 targetDir = (muzzlePoint.position - shoulderPos).normalized;
+            Quaternion targetRot = Quaternion.LookRotation(targetDir, mainCamera.transform.up);
+
+            // We apply a gentle correction to the rotation
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * stockSmoothing);
+        }
     }
 
     private void ApplyStabilization()
@@ -355,6 +382,9 @@ public class VRGun : MonoBehaviour
             shellRb.mass = 0.01f;
             shellRb.collisionDetectionMode = CollisionDetectionMode.Discrete;
         }
+
+        PhysicsLOD lod = FindFirstObjectByType<PhysicsLOD>();
+        if (lod != null) lod.RegisterRigidbody(shellRb);
         
         Vector3 ejectionDir = ejectionPort.TransformDirection(gunData.shellEjectionDirection.normalized);
         Vector3 randomOffset = Random.insideUnitSphere * 0.5f;

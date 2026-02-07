@@ -97,6 +97,10 @@ public class PhysicsWeapon : MonoBehaviour
             
             DamageType damageType = isStab ? DamageType.Stab : DamageType.Slash;
             damageable.TakeDamage(totalDamage, hitPoint, hitDirection, damageType);
+
+            // Add hit lag feel via haptics
+            HapticsUtility.SendHapticImpulse(0.8f, 0.05f, HapticsUtility.Controller.Left);
+            HapticsUtility.SendHapticImpulse(0.8f, 0.05f, HapticsUtility.Controller.Right);
         }
         
         SendHitHaptics(isBlade, speed);

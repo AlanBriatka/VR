@@ -263,16 +263,36 @@ public class BasicEnemy : MonoBehaviour, IDamageable
         Debug.Log($"[{name}] Melee Attack! (Triggered Procedural Attack)", this);
     }
     
+    public void SetDifficulty(float healthScale, float speedScale)
+    {
+        maxHealth *= healthScale;
+        currentHealth = maxHealth;
+        moveSpeed *= speedScale;
+        if (agent != null) agent.speed = moveSpeed;
+    }
+
     public void TakeDamage(float damage, Vector3 hitPoint, Vector3 hitDirection, DamageType damageType = DamageType.Slash)
     {
         if (currentState == EnemyState.Dead) return;
         
         float finalDamage = damage;
+        Rigidbody hitRb = FindClosestRigidbody(hitPoint);
+        bool isHeadshot = hitRb != null && hitRb.name.ToLower().Contains("head");
+        bool isLegshot = hitRb != null && (hitRb.name.ToLower().Contains("leg") || hitRb.name.ToLower().Contains("foot"));
+
+        if (isHeadshot) finalDamage *= 4f;
+        if (isLegshot) finalDamage *= 0.8f;
+
         currentHealth -= finalDamage;
         
         if (currentHealth <= 0)
         {
             TransitionToDeath(hitPoint, hitDirection, damageType);
+            if (isHeadshot) ExplodeHead(hitPoint, hitDirection);
+        }
+        else if (isLegshot && finalDamage > 10f)
+        {
+            TransitionToHobble();
         }
         else if (finalDamage >= staggerThreshold)
         {
@@ -282,6 +302,23 @@ public class BasicEnemy : MonoBehaviour, IDamageable
         {
             PlayHitReaction();
         }
+    }
+
+    private void ExplodeHead(Vector3 hitPoint, Vector3 hitDirection)
+    {
+        // Visceral head explosion effect
+        if (ImpactManager.Instance != null)
+        {
+            ImpactManager.Instance.PlayImpact(hitPoint, -hitDirection, "Flesh");
+        }
+        Debug.Log($"[{name}] HEAD EXPLODED!");
+    }
+
+    private void TransitionToHobble()
+    {
+        moveSpeed *= 0.3f;
+        if (agent != null && agent.isOnNavMesh) agent.speed = moveSpeed;
+        Debug.Log($"[{name}] HOBBLING!");
     }
     
     private void TransitionToStagger(Vector3 hitDirection, float damage)
@@ -332,6 +369,10 @@ public class BasicEnemy : MonoBehaviour, IDamageable
             }
         }
         
+        if (WaveManager.Instance != null)
+        {
+            WaveManager.Instance.EnemyDied();
+        }
         Destroy(gameObject, 10f);
     }
     
