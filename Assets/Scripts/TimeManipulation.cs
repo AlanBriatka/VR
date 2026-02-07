@@ -59,6 +59,12 @@ public class TimeManipulation : MonoBehaviour
     private void OnSlowMotionToggle(InputAction.CallbackContext context)
     {
         ToggleSlowMotion();
+
+        if (context.control != null && context.control.device != null)
+        {
+            bool isLeft = context.control.device.name.ToLower().Contains("left");
+            HapticsUtility.SendHapticImpulse(0.3f, 0.15f, isLeft ? HapticsUtility.Controller.Left : HapticsUtility.Controller.Right);
+        }
     }
     
     public void ToggleSlowMotion()

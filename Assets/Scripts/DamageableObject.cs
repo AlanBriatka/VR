@@ -17,6 +17,7 @@ public class DamageableObject : MonoBehaviour, IDamageable
     private Rigidbody rb;
     private Renderer objectRenderer;
     private Color originalColor;
+    private static readonly WaitForSeconds flashWait = new WaitForSeconds(0.1f);
     
     private void Start()
     {
@@ -80,7 +81,7 @@ public class DamageableObject : MonoBehaviour, IDamageable
         if (objectRenderer != null)
         {
             objectRenderer.material.color = damageColor;
-            yield return new WaitForSeconds(0.1f);
+            yield return flashWait;
             objectRenderer.material.color = originalColor;
         }
     }

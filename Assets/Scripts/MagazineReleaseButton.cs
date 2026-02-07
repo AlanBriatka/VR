@@ -23,6 +23,7 @@ public class MagazineReleaseButton : MonoBehaviour
     private float currentPressAmount;
     private bool isOnCooldown;
     private AudioSource audioSource;
+    private WaitForSeconds cooldownWait;
     
     private void Awake()
     {
@@ -62,6 +63,8 @@ public class MagazineReleaseButton : MonoBehaviour
         {
             magazine = gun.GetComponent<GunMagazine>();
         }
+
+        cooldownWait = new WaitForSeconds(cooldownTime);
     }
     
     private void Update()
@@ -111,7 +114,7 @@ public class MagazineReleaseButton : MonoBehaviour
         PlayClickSound();
         EjectMagazine();
         
-        yield return new WaitForSeconds(cooldownTime);
+        yield return cooldownWait;
         
         isOnCooldown = false;
     }

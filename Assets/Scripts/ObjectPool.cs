@@ -13,6 +13,7 @@ public class ObjectPool : MonoBehaviour
     
     public List<Pool> pools;
     private Dictionary<string, Queue<GameObject>> poolDictionary;
+    private Dictionary<float, WaitForSeconds> waitDictionary = new Dictionary<float, WaitForSeconds>();
     
     private static ObjectPool instance;
     public static ObjectPool Instance
@@ -112,8 +113,16 @@ public class ObjectPool : MonoBehaviour
     
     private System.Collections.IEnumerator DespawnAfterDelay(string tag, GameObject obj, float delay)
     {
-        yield return new WaitForSeconds(delay);
+        yield return GetWait(delay);
         DespawnImmediate(tag, obj);
+    }
+
+    private WaitForSeconds GetWait(float time)
+    {
+        if (waitDictionary.TryGetValue(time, out var wait)) return wait;
+        wait = new WaitForSeconds(time);
+        waitDictionary.Add(time, wait);
+        return wait;
     }
     
     private void DespawnImmediate(string tag, GameObject obj)

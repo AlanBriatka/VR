@@ -228,6 +228,19 @@ public class VRGun : MonoBehaviour
         ApplyRecoil();
         CastBulletRay();
         SpawnMuzzleFlash();
+        SendFireHaptics();
+    }
+
+    private void SendFireHaptics()
+    {
+        if (grabInteractable != null && grabInteractable.isSelected)
+        {
+            foreach (var interactor in grabInteractable.interactorsSelecting)
+            {
+                bool isLeft = interactor.transform.name.ToLower().Contains("left");
+                HapticsUtility.SendHapticImpulse(0.5f, 0.1f, isLeft ? HapticsUtility.Controller.Left : HapticsUtility.Controller.Right);
+            }
+        }
     }
     
     private void CastBulletRay()

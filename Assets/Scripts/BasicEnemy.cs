@@ -33,6 +33,7 @@ public class BasicEnemy : MonoBehaviour, IDamageable
     private Collider[] ragdollColliders;
     private EnemyGunPickup gunPickup;
     private EnemyShooting enemyShooting;
+    private ProceduralEnemyAnimation proceduralAnim;
     
     private EnemyState currentState = EnemyState.Idle;
     private float currentHealth;
@@ -68,6 +69,12 @@ public class BasicEnemy : MonoBehaviour, IDamageable
         animator = GetComponent<Animator>();
         gunPickup = GetComponent<EnemyGunPickup>();
         enemyShooting = GetComponent<EnemyShooting>();
+        proceduralAnim = GetComponent<ProceduralEnemyAnimation>();
+
+        if (proceduralAnim != null && animator != null)
+        {
+            animator.enabled = false; // Disable standard animator to use procedural rigging
+        }
     }
     
     private void Initialize()
@@ -173,7 +180,11 @@ public class BasicEnemy : MonoBehaviour, IDamageable
     
     private void UpdateAnimator(float speed)
     {
-        if (animator != null)
+        if (proceduralAnim != null)
+        {
+            proceduralAnim.UpdateAnimation(speed);
+        }
+        else if (animator != null && animator.enabled)
         {
             animator.SetFloat(AnimSpeed, speed / moveSpeed);
         }
@@ -195,7 +206,11 @@ public class BasicEnemy : MonoBehaviour, IDamageable
     
     private void PerformMeleeAttack()
     {
-        Debug.Log($"[{name}] Melee Attack! (Implement physics-based melee attack here)", this);
+        if (proceduralAnim != null)
+        {
+            proceduralAnim.PlayAttack();
+        }
+        Debug.Log($"[{name}] Melee Attack! (Triggered Procedural Attack)", this);
     }
     
     public void TakeDamage(float damage, Vector3 hitPoint, Vector3 hitDirection, DamageType damageType = DamageType.Slash)
