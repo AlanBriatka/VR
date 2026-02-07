@@ -51,6 +51,13 @@ public class WaveManager : MonoBehaviour
                 yield return new WaitForSeconds(1f);
             }
 
+            // Last Kill Juice
+            if (TimeManipulation.Instance != null)
+            {
+                TimeManipulation.Instance.EnableSlowMotion();
+                StartCoroutine(StopSlowMoAfterDelay(2f));
+            }
+
             Debug.Log("Wave Clear! Waiting for next wave...");
             currentWaveIndex++;
             yield return new WaitForSeconds(timeBetweenWaves);
@@ -90,5 +97,14 @@ public class WaveManager : MonoBehaviour
     public void EnemyDied()
     {
         activeEnemies--;
+    }
+
+    private IEnumerator StopSlowMoAfterDelay(float delay)
+    {
+        yield return new WaitForSecondsRealtime(delay);
+        if (TimeManipulation.Instance != null)
+        {
+            TimeManipulation.Instance.DisableSlowMotion();
+        }
     }
 }

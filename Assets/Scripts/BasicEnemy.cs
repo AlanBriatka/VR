@@ -420,6 +420,11 @@ public class BasicEnemy : MonoBehaviour, IDamageable
             TimeManipulation.Instance.AddFocusFromKill();
         }
 
+        if (ComboManager.Instance != null)
+        {
+            ComboManager.Instance.RegisterKill();
+        }
+
         Destroy(gameObject, 10f);
     }
     
@@ -434,6 +439,11 @@ public class BasicEnemy : MonoBehaviour, IDamageable
             {
                 rb.isKinematic = true;
                 rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+
+                // Add XR grab capability to ragdoll limbs for Hard Bullet style grabbing
+                var grab = rb.gameObject.AddComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>();
+                grab.movementType = UnityEngine.XR.Interaction.Toolkit.Interactables.XRBaseInteractable.MovementType.VelocityTracking;
+                grab.selectEntered.AddListener((args) => OnLimbGrabbed(rb));
             }
         }
         
@@ -485,6 +495,15 @@ public class BasicEnemy : MonoBehaviour, IDamageable
         }
     }
     
+    private void OnLimbGrabbed(Rigidbody limb)
+    {
+        // If we grab a limb while alive, it might stagger them or make them easier to kill
+        if (currentState != EnemyState.Dead && currentState != EnemyState.Staggered)
+        {
+            TakeDamage(10f, limb.position, Vector3.zero, DamageType.Blunt);
+        }
+    }
+
     private Rigidbody FindClosestRigidbody(Vector3 point)
     {
         Rigidbody closest = null;
