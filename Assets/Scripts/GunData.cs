@@ -39,4 +39,11 @@ public class GunData : ScriptableObject
     
     [Tooltip("How long before shells despawn")]
     public float shellLifetime = 5f;
+
+    [Header("Two-Handed Stabilization")]
+    [Tooltip("Recoil reduction when held with both hands (0 to 1)")]
+    public float twoHandedRecoilReduction = 0.5f;
+
+    [Tooltip("Sway reduction when held with both hands (0 to 1)")]
+    public float twoHandedSwayReduction = 0.7f;
 }

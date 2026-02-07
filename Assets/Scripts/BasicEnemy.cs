@@ -16,6 +16,8 @@ public class BasicEnemy : MonoBehaviour, IDamageable
     [SerializeField] private float chaseRange = 15f;
     [SerializeField] private float moveSpeed = 3.5f;
     [SerializeField] private float staggerThreshold = 20f;
+    [SerializeField] private float healthRetreatThreshold = 30f;
+    [SerializeField] private float coverSearchRadius = 10f;
     
     [Header("Ragdoll")]
     [SerializeField] private bool enableRagdollOnDeath = true;
@@ -24,7 +26,7 @@ public class BasicEnemy : MonoBehaviour, IDamageable
     [Header("Gun System")]
     [SerializeField] private bool canUseGuns = true;
     
-    private enum EnemyState { Idle, LookingForGun, Chasing, Attacking, Staggered, Dead }
+    private enum EnemyState { Idle, LookingForGun, Chasing, Attacking, SeekingCover, Retreating, Staggered, Dead }
     
     private NavMeshAgent agent;
     private Animator animator;
@@ -118,7 +120,11 @@ public class BasicEnemy : MonoBehaviour, IDamageable
         
         float distanceToPlayer = Vector3.Distance(transform.position, player.position);
         
-        if (canUseGuns && gunPickup != null && !gunPickup.HasGun)
+        if (currentHealth < healthRetreatThreshold && currentState != EnemyState.Retreating)
+        {
+            currentState = EnemyState.Retreating;
+        }
+        else if (canUseGuns && gunPickup != null && !gunPickup.HasGun)
         {
             currentState = EnemyState.LookingForGun;
         }
@@ -130,7 +136,11 @@ public class BasicEnemy : MonoBehaviour, IDamageable
         {
             currentState = EnemyState.Attacking;
         }
-        else
+        else if (currentState == EnemyState.Chasing && Random.value < 0.001f) // Chance to seek cover while chasing
+        {
+            currentState = EnemyState.SeekingCover;
+        }
+        else if (currentState != EnemyState.SeekingCover && currentState != EnemyState.Retreating)
         {
             currentState = EnemyState.Chasing;
         }
@@ -170,6 +180,24 @@ public class BasicEnemy : MonoBehaviour, IDamageable
                     PerformAttack();
                 }
                 break;
+
+            case EnemyState.SeekingCover:
+                UpdateAnimator(agent.velocity.magnitude);
+                if (!agent.hasPath || agent.remainingDistance < 0.5f)
+                {
+                    FindCover();
+                }
+                break;
+
+            case EnemyState.Retreating:
+                UpdateAnimator(agent.velocity.magnitude);
+                Vector3 retreatDir = (transform.position - player.position).normalized;
+                agent.SetDestination(transform.position + retreatDir * 5f);
+                if (Vector3.Distance(transform.position, player.position) > chaseRange * 1.2f)
+                {
+                    currentState = EnemyState.Idle;
+                }
+                break;
                 
             case EnemyState.Staggered:
                 agent.ResetPath();
@@ -204,6 +232,28 @@ public class BasicEnemy : MonoBehaviour, IDamageable
         }
     }
     
+    private void FindCover()
+    {
+        Vector3 randomDirection = Random.insideUnitSphere * coverSearchRadius;
+        randomDirection += transform.position;
+        NavMeshHit hit;
+        if (NavMesh.SamplePosition(randomDirection, out hit, coverSearchRadius, 1))
+        {
+            Vector3 directionToPlayer = (player.position - hit.position).normalized;
+            if (Physics.Raycast(hit.position + Vector3.up, directionToPlayer, out RaycastHit rayHit, coverSearchRadius))
+            {
+                if (rayHit.collider.transform != player)
+                {
+                    agent.SetDestination(hit.position);
+                    return;
+                }
+            }
+        }
+
+        Vector3 sideStep = Vector3.Cross(player.position - transform.position, Vector3.up).normalized * 3f;
+        agent.SetDestination(transform.position + sideStep * (Random.value > 0.5f ? 1 : -1));
+    }
+
     private void PerformMeleeAttack()
     {
         if (proceduralAnim != null)

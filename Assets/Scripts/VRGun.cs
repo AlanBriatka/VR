@@ -15,6 +15,7 @@ public class VRGun : MonoBehaviour
     [SerializeField] private Transform slideTransform;
     [SerializeField] private Transform ejectionPort;
     [SerializeField] private Transform muzzlePoint;
+    [SerializeField] private XRGrabInteractable secondaryGrip;
     
     [Header("Magazine System")]
     [SerializeField] private Transform magazineWell;
@@ -48,6 +49,7 @@ public class VRGun : MonoBehaviour
     private float currentSlidePosition;
     
     private bool isInitialized;
+    private bool isTwoHanded;
     
     public bool HasChamberedRound => chamberedRound;
     public bool HasMagazine => currentMagazine != null;
@@ -115,6 +117,12 @@ public class VRGun : MonoBehaviour
             grabInteractable.activated.AddListener(OnTriggerPressed);
             grabInteractable.deactivated.AddListener(OnTriggerReleased);
         }
+
+        if (secondaryGrip != null)
+        {
+            secondaryGrip.selectEntered.AddListener(OnSecondaryGrabbed);
+            secondaryGrip.selectExited.AddListener(OnSecondaryReleased);
+        }
     }
     
     private void OnDisable()
@@ -123,6 +131,12 @@ public class VRGun : MonoBehaviour
         {
             grabInteractable.activated.RemoveListener(OnTriggerPressed);
             grabInteractable.deactivated.RemoveListener(OnTriggerReleased);
+        }
+
+        if (secondaryGrip != null)
+        {
+            secondaryGrip.selectEntered.RemoveListener(OnSecondaryGrabbed);
+            secondaryGrip.selectExited.RemoveListener(OnSecondaryReleased);
         }
     }
     
@@ -133,6 +147,20 @@ public class VRGun : MonoBehaviour
         UpdateState();
         HandleTrigger();
         UpdateSlideAnimation();
+        ApplyStabilization();
+    }
+
+    private void ApplyStabilization()
+    {
+        if (isTwoHanded && rb != null && !rb.isKinematic)
+        {
+            // Increase angular drag to stabilize aim when using two hands
+            rb.angularDamping = 10f;
+        }
+        else if (rb != null && !rb.isKinematic)
+        {
+            rb.angularDamping = 0.05f;
+        }
     }
     
     private void UpdateState()
@@ -180,6 +208,16 @@ public class VRGun : MonoBehaviour
     private void OnTriggerReleased(DeactivateEventArgs args)
     {
         triggerPressed = false;
+    }
+
+    private void OnSecondaryGrabbed(SelectEnterEventArgs args)
+    {
+        isTwoHanded = true;
+    }
+
+    private void OnSecondaryReleased(SelectExitEventArgs args)
+    {
+        isTwoHanded = false;
     }
     
     private void AttemptFire()
@@ -262,7 +300,14 @@ public class VRGun : MonoBehaviour
             damageable.TakeDamage(gunData.damage, hit.point, shootDirection, DamageType.Bullet);
         }
         
-        SpawnBulletHole(hit);
+        if (ImpactManager.Instance != null)
+        {
+            ImpactManager.Instance.PlayImpact(hit.point, hit.normal, hit.collider.tag, hit.transform);
+        }
+        else
+        {
+            SpawnBulletHole(hit);
+        }
         
         Debug.DrawLine(muzzlePoint.position, hit.point, Color.yellow, 1f);
     }
@@ -345,11 +390,13 @@ public class VRGun : MonoBehaviour
     {
         if (rb == null || !grabInteractable.isSelected) return;
         
+        float recoilMult = isTwoHanded ? (1f - gunData.twoHandedRecoilReduction) : 1f;
+
         Vector3 recoilDirection = -muzzlePoint.forward;
         Vector3 upwardKick = muzzlePoint.up * gunData.recoilTorque * 0.5f;
         
-        rb.AddForce((recoilDirection + upwardKick) * gunData.recoilForce, ForceMode.Impulse);
-        rb.AddTorque(muzzlePoint.right * gunData.recoilTorque, ForceMode.Impulse);
+        rb.AddForce((recoilDirection + upwardKick) * gunData.recoilForce * recoilMult, ForceMode.Impulse);
+        rb.AddTorque(muzzlePoint.right * gunData.recoilTorque * recoilMult, ForceMode.Impulse);
     }
     
     public void RackSlide()

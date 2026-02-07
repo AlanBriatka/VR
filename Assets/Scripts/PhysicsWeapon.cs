@@ -100,7 +100,16 @@ public class PhysicsWeapon : MonoBehaviour
         }
         
         SendHitHaptics(isBlade, speed);
-        PlayHitSound(isBlade);
+
+        if (ImpactManager.Instance != null)
+        {
+            ContactPoint contact = collision.GetContact(0);
+            ImpactManager.Instance.PlayImpact(contact.point, contact.normal, collision.gameObject.tag, collision.transform);
+        }
+        else
+        {
+            PlayHitSound(isBlade);
+        }
         lastHitTime = Time.time;
         
         string hitType = isStab ? "STAB" : (isBlade ? "slash" : "pommel");

@@ -19,6 +19,11 @@ public class ProceduralEnemyAnimation : MonoBehaviour
     [SerializeField] private float breathingIntensity = 0.02f;
     [SerializeField] private float breathingSpeed = 1.5f;
 
+    [Header("Awareness")]
+    [SerializeField] private bool lookAtPlayer = true;
+    [SerializeField] private float headTurnSpeed = 5f;
+    [SerializeField] private float maxHeadAngle = 60f;
+
     private Vector3 leftFootOriginalPos;
     private Vector3 rightFootOriginalPos;
     private Vector3 bodyOriginalPos;
@@ -27,12 +32,16 @@ public class ProceduralEnemyAnimation : MonoBehaviour
     private float currentSpeed;
     private bool isAttacking;
     private float attackTime;
+    private Transform playerTransform;
 
     private void Start()
     {
         if (leftFootTarget) leftFootOriginalPos = leftFootTarget.localPosition;
         if (rightFootTarget) rightFootOriginalPos = rightFootTarget.localPosition;
         if (bodyTarget) bodyOriginalPos = bodyTarget.localPosition;
+
+        GameObject player = GameObject.FindGameObjectWithTag("Player");
+        if (player) playerTransform = player.transform;
     }
 
     public void UpdateAnimation(float speed)
@@ -51,6 +60,30 @@ public class ProceduralEnemyAnimation : MonoBehaviour
         if (isAttacking)
         {
             UpdateAttack();
+        }
+
+        if (lookAtPlayer)
+        {
+            UpdateHeadTracking();
+        }
+    }
+
+    private void UpdateHeadTracking()
+    {
+        if (headTarget == null || playerTransform == null) return;
+
+        Vector3 directionToPlayer = (playerTransform.position + Vector3.up * 1.6f) - headTarget.position;
+        Quaternion targetRotation = Quaternion.LookRotation(directionToPlayer);
+
+        // Clamp rotation
+        float angle = Quaternion.Angle(transform.rotation, targetRotation);
+        if (angle < maxHeadAngle)
+        {
+            headTarget.rotation = Quaternion.Slerp(headTarget.rotation, targetRotation, Time.deltaTime * headTurnSpeed);
+        }
+        else
+        {
+            headTarget.localRotation = Quaternion.Slerp(headTarget.localRotation, Quaternion.identity, Time.deltaTime * headTurnSpeed);
         }
     }
 
