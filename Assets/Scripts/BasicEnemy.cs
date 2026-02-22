@@ -16,7 +16,14 @@ public class BasicEnemy : MonoBehaviour, IDamageable
     [SerializeField] private float chaseRange = 15f;
     [SerializeField] private float moveSpeed = 3.5f;
     [SerializeField] private float staggerThreshold = 20f;
+    [SerializeField] private float healthRetreatThreshold = 30f;
+    [SerializeField] private float coverSearchRadius = 10f;
     
+    [Header("Armor System")]
+    [SerializeField] private GameObject[] armorPieces;
+    [SerializeField] private float armorHealth = 50f;
+    private bool armorBroken;
+
     [Header("Ragdoll")]
     [SerializeField] private bool enableRagdollOnDeath = true;
     [SerializeField] private float ragdollForceMultiplier = 300f;
@@ -24,7 +31,7 @@ public class BasicEnemy : MonoBehaviour, IDamageable
     [Header("Gun System")]
     [SerializeField] private bool canUseGuns = true;
     
-    private enum EnemyState { Idle, LookingForGun, Chasing, Attacking, Staggered, Dead }
+    private enum EnemyState { Idle, LookingForGun, Chasing, Attacking, SeekingCover, Retreating, Staggered, Dead }
     
     private NavMeshAgent agent;
     private Animator animator;
@@ -33,6 +40,7 @@ public class BasicEnemy : MonoBehaviour, IDamageable
     private Collider[] ragdollColliders;
     private EnemyGunPickup gunPickup;
     private EnemyShooting enemyShooting;
+    private ProceduralEnemyAnimation proceduralAnim;
     
     private EnemyState currentState = EnemyState.Idle;
     private float currentHealth;
@@ -68,6 +76,12 @@ public class BasicEnemy : MonoBehaviour, IDamageable
         animator = GetComponent<Animator>();
         gunPickup = GetComponent<EnemyGunPickup>();
         enemyShooting = GetComponent<EnemyShooting>();
+        proceduralAnim = GetComponent<ProceduralEnemyAnimation>();
+
+        if (proceduralAnim != null && animator != null)
+        {
+            animator.enabled = false; // Disable standard animator to use procedural rigging
+        }
     }
     
     private void Initialize()
@@ -111,7 +125,11 @@ public class BasicEnemy : MonoBehaviour, IDamageable
         
         float distanceToPlayer = Vector3.Distance(transform.position, player.position);
         
-        if (canUseGuns && gunPickup != null && !gunPickup.HasGun)
+        if (currentHealth < healthRetreatThreshold && currentState != EnemyState.Retreating)
+        {
+            currentState = EnemyState.Retreating;
+        }
+        else if (canUseGuns && gunPickup != null && !gunPickup.HasGun)
         {
             currentState = EnemyState.LookingForGun;
         }
@@ -123,7 +141,11 @@ public class BasicEnemy : MonoBehaviour, IDamageable
         {
             currentState = EnemyState.Attacking;
         }
-        else
+        else if (currentState == EnemyState.Chasing && Random.value < 0.001f) // Chance to seek cover while chasing
+        {
+            currentState = EnemyState.SeekingCover;
+        }
+        else if (currentState != EnemyState.SeekingCover && currentState != EnemyState.Retreating)
         {
             currentState = EnemyState.Chasing;
         }
@@ -163,6 +185,29 @@ public class BasicEnemy : MonoBehaviour, IDamageable
                     PerformAttack();
                 }
                 break;
+
+            case EnemyState.SeekingCover:
+                UpdateAnimator(agent.velocity.magnitude);
+                if (!agent.pathPending && agent.remainingDistance < 0.5f)
+                {
+                    // Stay in cover for a bit or transition back
+                    if (Random.value < 0.01f) currentState = EnemyState.Chasing;
+                }
+                if (!agent.hasPath)
+                {
+                    FindCover();
+                }
+                break;
+
+            case EnemyState.Retreating:
+                UpdateAnimator(agent.velocity.magnitude);
+                Vector3 retreatDir = (transform.position - player.position).normalized;
+                agent.SetDestination(transform.position + retreatDir * 5f);
+                if (Vector3.Distance(transform.position, player.position) > chaseRange * 1.2f)
+                {
+                    currentState = EnemyState.Idle;
+                }
+                break;
                 
             case EnemyState.Staggered:
                 agent.ResetPath();
@@ -173,7 +218,11 @@ public class BasicEnemy : MonoBehaviour, IDamageable
     
     private void UpdateAnimator(float speed)
     {
-        if (animator != null)
+        if (proceduralAnim != null)
+        {
+            proceduralAnim.UpdateAnimation(speed);
+        }
+        else if (animator != null && animator.enabled)
         {
             animator.SetFloat(AnimSpeed, speed / moveSpeed);
         }
@@ -193,21 +242,86 @@ public class BasicEnemy : MonoBehaviour, IDamageable
         }
     }
     
+    private void FindCover()
+    {
+        Vector3 randomDirection = Random.insideUnitSphere * coverSearchRadius;
+        randomDirection += transform.position;
+        NavMeshHit hit;
+        if (NavMesh.SamplePosition(randomDirection, out hit, coverSearchRadius, 1))
+        {
+            Vector3 directionToPlayer = (player.position - hit.position).normalized;
+            if (Physics.Raycast(hit.position + Vector3.up, directionToPlayer, out RaycastHit rayHit, coverSearchRadius))
+            {
+                if (rayHit.collider.transform != player)
+                {
+                    agent.SetDestination(hit.position);
+                    return;
+                }
+            }
+        }
+
+        Vector3 sideStep = Vector3.Cross(player.position - transform.position, Vector3.up).normalized * 3f;
+        agent.SetDestination(transform.position + sideStep * (Random.value > 0.5f ? 1 : -1));
+    }
+
     private void PerformMeleeAttack()
     {
-        Debug.Log($"[{name}] Melee Attack! (Implement physics-based melee attack here)", this);
+        if (proceduralAnim != null)
+        {
+            proceduralAnim.PlayAttack();
+        }
+        Debug.Log($"[{name}] Melee Attack! (Triggered Procedural Attack)", this);
     }
     
+    public void SetDifficulty(float healthScale, float speedScale)
+    {
+        maxHealth *= healthScale;
+        currentHealth = maxHealth;
+        moveSpeed *= speedScale;
+        if (agent != null) agent.speed = moveSpeed;
+    }
+
     public void TakeDamage(float damage, Vector3 hitPoint, Vector3 hitDirection, DamageType damageType = DamageType.Slash)
     {
         if (currentState == EnemyState.Dead) return;
         
         float finalDamage = damage;
+
+        // Armor logic
+        if (!armorBroken && armorPieces != null && armorPieces.Length > 0)
+        {
+            armorHealth -= damage;
+            finalDamage *= 0.5f; // Armor reduces damage
+
+            if (armorHealth <= 0)
+            {
+                BreakArmor(hitDirection);
+            }
+        }
+
+        Rigidbody hitRb = FindClosestRigidbody(hitPoint);
+        bool isHeadshot = hitRb != null && hitRb.name.ToLower().Contains("head");
+        bool isLegshot = hitRb != null && (hitRb.name.ToLower().Contains("leg") || hitRb.name.ToLower().Contains("foot"));
+
+        if (isHeadshot) finalDamage *= 4f;
+        if (isLegshot) finalDamage *= 0.8f;
+
         currentHealth -= finalDamage;
+
+        // Dismemberment chance on high damage
+        if (finalDamage > 40f && hitRb != null && hitRb != GetComponent<Rigidbody>())
+        {
+            DismemberLimb(hitRb, hitDirection);
+        }
         
         if (currentHealth <= 0)
         {
             TransitionToDeath(hitPoint, hitDirection, damageType);
+            if (isHeadshot) ExplodeHead(hitPoint, hitDirection);
+        }
+        else if (isLegshot && finalDamage > 10f)
+        {
+            TransitionToHobble();
         }
         else if (finalDamage >= staggerThreshold)
         {
@@ -217,6 +331,60 @@ public class BasicEnemy : MonoBehaviour, IDamageable
         {
             PlayHitReaction();
         }
+    }
+
+    private void ExplodeHead(Vector3 hitPoint, Vector3 hitDirection)
+    {
+        // Visceral head explosion effect
+        if (ImpactManager.Instance != null)
+        {
+            ImpactManager.Instance.PlayImpact(hitPoint, -hitDirection, "Flesh");
+        }
+        Debug.Log($"[{name}] HEAD EXPLODED!");
+    }
+
+    private void TransitionToHobble()
+    {
+        moveSpeed *= 0.3f;
+        if (agent != null && agent.isOnNavMesh) agent.speed = moveSpeed;
+        Debug.Log($"[{name}] HOBBLING!");
+    }
+
+    private void DismemberLimb(Rigidbody limb, Vector3 force)
+    {
+        CharacterJoint joint = limb.GetComponent<CharacterJoint>();
+        if (joint != null)
+        {
+            Destroy(joint);
+            limb.transform.SetParent(null);
+            limb.AddForce(force * 5f, ForceMode.Impulse);
+
+            // Trigger blood effect at detachment point
+            if (ImpactManager.Instance != null)
+            {
+                ImpactManager.Instance.PlayImpact(limb.position, -force.normalized, "Flesh");
+            }
+
+            Debug.Log($"[{name}] DISMEMBERED: {limb.name}");
+        }
+    }
+
+    private void BreakArmor(Vector3 hitDirection)
+    {
+        armorBroken = true;
+        foreach (GameObject piece in armorPieces)
+        {
+            if (piece == null) continue;
+            piece.transform.SetParent(null);
+            Rigidbody rb = piece.GetComponent<Rigidbody>();
+            if (rb == null) rb = piece.AddComponent<Rigidbody>();
+
+            rb.isKinematic = false;
+            rb.AddForce(hitDirection * 5f, ForceMode.Impulse);
+            rb.AddTorque(Random.insideUnitSphere * 10f, ForceMode.Impulse);
+            Destroy(piece, 5f);
+        }
+        Debug.Log($"[{name}] ARMOR SHATTERED!");
     }
     
     private void TransitionToStagger(Vector3 hitDirection, float damage)
@@ -267,6 +435,21 @@ public class BasicEnemy : MonoBehaviour, IDamageable
             }
         }
         
+        if (WaveManager.Instance != null)
+        {
+            WaveManager.Instance.EnemyDied();
+        }
+
+        if (TimeManipulation.Instance != null)
+        {
+            TimeManipulation.Instance.AddFocusFromKill();
+        }
+
+        if (ComboManager.Instance != null)
+        {
+            ComboManager.Instance.RegisterKill();
+        }
+
         Destroy(gameObject, 10f);
     }
     
@@ -281,6 +464,11 @@ public class BasicEnemy : MonoBehaviour, IDamageable
             {
                 rb.isKinematic = true;
                 rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+
+                // Add XR grab capability to ragdoll limbs for Hard Bullet style grabbing
+                var grab = rb.gameObject.AddComponent<UnityEngine.XR.Interaction.Toolkit.Interactables.XRGrabInteractable>();
+                grab.movementType = UnityEngine.XR.Interaction.Toolkit.Interactables.XRBaseInteractable.MovementType.VelocityTracking;
+                grab.selectEntered.AddListener((args) => OnLimbGrabbed(rb));
             }
         }
         
@@ -332,6 +520,15 @@ public class BasicEnemy : MonoBehaviour, IDamageable
         }
     }
     
+    private void OnLimbGrabbed(Rigidbody limb)
+    {
+        // If we grab a limb while alive, it might stagger them or make them easier to kill
+        if (currentState != EnemyState.Dead && currentState != EnemyState.Staggered)
+        {
+            TakeDamage(10f, limb.position, Vector3.zero, DamageType.Blunt);
+        }
+    }
+
     private Rigidbody FindClosestRigidbody(Vector3 point)
     {
         Rigidbody closest = null;

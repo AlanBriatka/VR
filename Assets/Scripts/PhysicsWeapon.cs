@@ -25,6 +25,7 @@ public class PhysicsWeapon : MonoBehaviour
     public AudioClip[] slashSounds;
     
     private Rigidbody rb;
+    private XRGrabInteractable grabInteractable;
     private Vector3 previousPosition;
     private Vector3 velocity;
     private Vector3 angularVelocityVec;
@@ -35,6 +36,7 @@ public class PhysicsWeapon : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
+        grabInteractable = GetComponent<XRGrabInteractable>();
         audioSource = gameObject.AddComponent<AudioSource>();
         audioSource.spatialBlend = 1.0f;
         audioSource.maxDistance = 20f;
@@ -95,15 +97,44 @@ public class PhysicsWeapon : MonoBehaviour
             
             DamageType damageType = isStab ? DamageType.Stab : DamageType.Slash;
             damageable.TakeDamage(totalDamage, hitPoint, hitDirection, damageType);
+
+            // Add hit lag feel via haptics
+            HapticsUtility.SendHapticImpulse(0.8f, 0.05f, HapticsUtility.Controller.Left);
+            HapticsUtility.SendHapticImpulse(0.8f, 0.05f, HapticsUtility.Controller.Right);
         }
         
-        PlayHitSound(isBlade);
+        SendHitHaptics(isBlade, speed);
+
+        if (ImpactManager.Instance != null)
+        {
+            ContactPoint contact = collision.GetContact(0);
+            ImpactManager.Instance.PlayImpact(contact.point, contact.normal, collision.gameObject.tag, collision.transform);
+        }
+        else
+        {
+            PlayHitSound(isBlade);
+        }
         lastHitTime = Time.time;
         
         string hitType = isStab ? "STAB" : (isBlade ? "slash" : "pommel");
         Debug.Log($"[{hitType}] {collision.gameObject.name} - Damage: {totalDamage:F1} (Speed: {speed:F1})");
     }
     
+    private void SendHitHaptics(bool isBlade, float speed)
+    {
+        if (grabInteractable != null && grabInteractable.isSelected)
+        {
+            float intensity = Mathf.Clamp01((speed / 10f) * (isBlade ? 1f : 0.5f));
+            float duration = isBlade ? 0.08f : 0.12f;
+
+            foreach (var interactor in grabInteractable.interactorsSelecting)
+            {
+                bool isLeft = interactor.transform.name.ToLower().Contains("left");
+                HapticsUtility.SendHapticImpulse(intensity, duration, isLeft ? HapticsUtility.Controller.Left : HapticsUtility.Controller.Right);
+            }
+        }
+    }
+
     private void PlayHitSound(bool isBlade)
     {
         if (hitSounds != null && hitSounds.Length > 0)

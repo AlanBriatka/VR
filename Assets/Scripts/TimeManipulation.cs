@@ -13,14 +13,25 @@ public class TimeManipulation : MonoBehaviour
     [Header("Audio")]
     [SerializeField] private AudioClip slowMotionEnterSound;
     [SerializeField] private AudioClip slowMotionExitSound;
+
+    [Header("Focus Meter")]
+    [SerializeField] private float maxFocus = 100f;
+    [SerializeField] private float focusDepletionRate = 20f;
+    [SerializeField] private float focusRefillPerKill = 15f;
     
+    private float currentFocus;
     private float targetTimeScale = 1f;
     private float currentTimeScale = 1f;
     private bool isSlowMotion;
     private AudioSource audioSource;
     
+    private static TimeManipulation instance;
+    public static TimeManipulation Instance => instance;
+
     private void Awake()
     {
+        instance = this;
+        currentFocus = maxFocus;
         audioSource = gameObject.AddComponent<AudioSource>();
         audioSource.spatialBlend = 0f;
         audioSource.playOnAwake = false;
@@ -47,6 +58,7 @@ public class TimeManipulation : MonoBehaviour
     private void Update()
     {
         UpdateTimeScale();
+        HandleFocus();
     }
     
     private void UpdateTimeScale()
@@ -55,10 +67,35 @@ public class TimeManipulation : MonoBehaviour
         Time.timeScale = currentTimeScale;
         Time.fixedDeltaTime = 0.02f * currentTimeScale;
     }
+
+    private void HandleFocus()
+    {
+        if (isSlowMotion)
+        {
+            currentFocus -= focusDepletionRate * Time.unscaledDeltaTime;
+            if (currentFocus <= 0)
+            {
+                DisableSlowMotion();
+            }
+        }
+    }
+
+    public void AddFocusFromKill()
+    {
+        currentFocus = Mathf.Min(currentFocus + focusRefillPerKill, maxFocus);
+    }
+
+    public float GetFocusRatio() => currentFocus / maxFocus;
     
     private void OnSlowMotionToggle(InputAction.CallbackContext context)
     {
         ToggleSlowMotion();
+
+        if (context.control != null && context.control.device != null)
+        {
+            bool isLeft = context.control.device.name.ToLower().Contains("left");
+            HapticsUtility.SendHapticImpulse(0.3f, 0.15f, isLeft ? HapticsUtility.Controller.Left : HapticsUtility.Controller.Right);
+        }
     }
     
     public void ToggleSlowMotion()
